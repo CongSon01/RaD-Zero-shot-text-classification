@@ -1,0 +1,6 @@
+pytorch==1.4.0
+transformers==3.5.1
+tqdm
+scikit-learn
+numpy
+pandas
