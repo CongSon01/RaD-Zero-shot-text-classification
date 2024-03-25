@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 from transformers import AdamW, get_constant_schedule_with_warmup
 from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.mixture import GaussianMixture
 
 from model import Model, Predictor
 from read_data import compute_class_offsets, prepare_dataloaders
@@ -29,8 +30,8 @@ parser.add_argument("--task_learning_rate", type=float, default=5e-4,
 parser.add_argument("--replay_freq", type=int, default=10,
                     help='frequency of replaying, i.e. replay one batch from memory'
                          ' every replay_freq batches')
-parser.add_argument('--kmeans', type=bool, default=False,
-                    help='whether applying Kmeans when choosing examples to store')
+parser.add_argument('--clus', type=str, default="gmm",
+                    help='whether applying Cluster alogrithm when choosing examples to store')
 # Sử dụng model huấn luyện sẵn
 parser.add_argument("--dump", type=bool, default=False,
                     help='dump the model or not')
@@ -247,7 +248,7 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
 
         y = torch.cat([y, y], dim=0)
         t = torch.cat([t, t], dim=0)
-
+    # general_features, specific_features, cls_pred, task_pred, bert_embedding
     total_g_fea, total_s_fea, cls_pred, task_pred, _ = model(x, mask)
 
     if args.disen:
@@ -361,8 +362,30 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
     y_list = torch.cat(y_list, dim=0).data.cpu().numpy()
     fea_list = torch.cat(fea_list, dim=0).data.cpu().numpy()
 
-    # if use KMeans
-    if args.kmeans:
+    # if use KMeans or GMM
+    if args.clus == "gmm":
+        n_clu = int(args.store_ratio * len(x_list))
+        estimator = GaussianMixture(n_components=n_clu)
+        estimator.fit(fea_list)
+        label_pred = estimator.predict(fea_list)
+        centroids = estimator.means_
+        for clu_id in range(n_clu):
+            index = [i for i in range(len(label_pred)) if label_pred[i] == clu_id]
+            closest = float("inf")
+            closest_x = None
+            closest_mask = None
+            closest_y = None
+            for j in index:
+                dis = np.sqrt(np.sum(np.square(centroids[clu_id] - fea_list[j])))
+                if dis < closest:
+                    closest_x = x_list[j]
+                    closest_mask = mask_list[j]
+                    closest_y = y_list[j]
+                    closest = dis
+
+            if closest_x is not None:
+                buffer.append(closest_x, closest_mask, closest_y, task_id)
+    elif args.clus == 'kmean':
         n_clu = int(args.store_ratio * len(x_list))
         estimator = KMeans(n_clusters=n_clu, random_state=args.seed)
         estimator.fit(fea_list)

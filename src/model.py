@@ -52,7 +52,7 @@ class Model(nn.Module):
                            return_dict=True)
 
         sequence_output = output.last_hidden_state
-        bert_embedding = sequence_output[:, 0:1, :].squeeze(dim=1)
+        bert_embedding = sequence_output[:, 0:1, :].squeeze(dim=1)  # convert to 1 dim
 
         general_features = self.General_Encoder(bert_embedding)
         specific_features = self.Specific_Encoder(bert_embedding)

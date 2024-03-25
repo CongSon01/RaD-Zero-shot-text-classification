@@ -9,5 +9,5 @@ python preprocess.py
 ```
 ### Training RnD model (Full options)
 ```
-python train.py --tasks ag yelp amazon yahoo dbpedia --epochs 1 1 1 1 1 --disen True --reg True --reggen 0.5 --regspe 0.5 --kmeans True --n-labeled -1 --n-val 500
+python train.py --tasks ag yelp amazon yahoo dbpedia --epochs 1 1 1 1 1 --disen True --reg True --reggen 0.5 --regspe 0.5 --clus gmm --n-labeled -1 --n-val 500
 ```
