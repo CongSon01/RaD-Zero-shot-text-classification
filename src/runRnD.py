@@ -9,7 +9,8 @@ from transformers import AdamW, get_constant_schedule_with_warmup
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.mixture import GaussianMixture
 
-from model import Model, Predictor
+from model.RnDmodel import RnDModel, Predictor
+
 from read_data import compute_class_offsets, prepare_dataloaders
 
 DATA_DIR = '../data'
@@ -418,7 +419,7 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
     for i in b_lbl:
         print("Label {} in Buffer: {}".format(i, buffer.labels.count(i)))
 
-def main():
+def runRnD():
     # fixed numpy random seed for dataset split
     np.random.seed(0)
     torch.manual_seed(args.seed)
@@ -436,7 +437,7 @@ def main():
     np.random.seed(torch.randint(1000, [1]).item())
 
     buffer = Memory()
-    model = Model(
+    model = RnDModel(
         n_tasks=task_num,
         n_class=total_classes,
         hidden_size=args.hidden_size).to(args.device)
@@ -627,4 +628,4 @@ def main():
 
 if __name__ == '__main__':
     print(args)
-    main()
+    runRnD()

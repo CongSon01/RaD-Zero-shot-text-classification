@@ -11,7 +11,20 @@ def get_tokens_id(x):
             tokens_id[i, j] = 0
     return tokens_id
 
-class Model(nn.Module):
+class Predictor(torch.nn.Module):
+    def __init__(self, num_class, hidden_size):
+        super(Predictor, self).__init__()
+
+        self.num_class = num_class
+
+        self.dis = torch.nn.Sequential(
+            torch.nn.Linear(hidden_size, self.num_class)
+        )
+
+    def forward(self, z):
+        return self.dis(z)
+    
+class RnDModel(nn.Module):
     
     def __init__(self, n_tasks, n_class, hidden_size):
         super().__init__()
@@ -65,33 +78,3 @@ class Model(nn.Module):
         return general_features, specific_features, \
                cls_pred, task_pred, bert_embedding
     
-class Predictor(torch.nn.Module):
-    def __init__(self, num_class, hidden_size):
-        super(Predictor, self).__init__()
-
-        self.num_class = num_class
-
-        self.dis = torch.nn.Sequential(
-            torch.nn.Linear(hidden_size, self.num_class)
-        )
-
-    def forward(self, z):
-        return self.dis(z)
-
-
-class BaseModel(nn.Module):
-
-    def __init__(self, n_class):
-        super().__init__()
-
-        self.n_class = n_class
-        self.bert = BertModel.from_pretrained("bert-base-uncased")
-        self.classifier = nn.Sequential(
-            nn.Linear(768, n_class)
-        )
-
-    def forward(self, x):
-        x, _ = self.bert(x)
-        x = torch.mean(x, 1)
-        logits = self.classifier(x)
-        return logits
