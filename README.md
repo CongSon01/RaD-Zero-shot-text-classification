@@ -21,5 +21,13 @@ python runFinetune.py --tasks ag yelp yahoo --epochs 4 3 2 --batch_size 2
 # Example for length-5 task sequence
 python runFinetune.py --tasks ag yelp amazon yahoo dbpedia --epochs 4 3 3 2 1 --batch_size 2
 ```
+### Training Replay model
+```
+# Example for length-3 task sequence
+python runReplay.py --tasks ag yelp yahoo --epochs 4 3 2 --batch_size 2  
+
+# Example for length-5 task sequence
+python runReplay.py --tasks ag yelp amazon yahoo dbpedia --epochs 4 3 3 2 1 --batch_size 2
+```
  
 
