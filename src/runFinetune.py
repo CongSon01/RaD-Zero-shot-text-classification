@@ -146,5 +146,4 @@ def runFineTune():
 
 
 if __name__ == '__main__':
-    print(args)
     runFineTune()
