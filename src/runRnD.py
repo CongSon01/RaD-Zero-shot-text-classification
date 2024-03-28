@@ -1,6 +1,7 @@
 import os
+from dotenv import load_dotenv
+from copy import deepcopy  
 import argparse
-from copy import deepcopy  # deepcopy phức tạp hơn copy thông thường
 
 import numpy as np
 import torch
@@ -15,69 +16,43 @@ from read_data import compute_class_offsets, prepare_dataloaders
 
 DATA_DIR = '../data'
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--seed", type=int, default=0)
-# nargs='+': có nghĩa là "--epochs" có thể nhận nhiều giá trị từ dòng lệnh.
-parser.add_argument("--epochs", nargs='+', type=int, default=[10, 10, 10, 10, 10],
-                    help='Epoch number for each task')
-parser.add_argument("--batch_size", type=int, default=8,
-                    help='training batch size')
-parser.add_argument("--bert_learning_rate", type=float, default=3e-5,
-                    help='learning rate for pretrained Bert')
-parser.add_argument("--learning_rate", type=float, default=3e-5,
-                    help='learning rate for Class Classifier/General Space Encoder/Specific Space Encoder')
-parser.add_argument("--task_learning_rate", type=float, default=5e-4,
-                    help='learning rate for Task ID Classifier')
-parser.add_argument("--replay_freq", type=int, default=10,
-                    help='frequency of replaying, i.e. replay one batch from memory'
-                         ' every replay_freq batches')
-parser.add_argument('--clus', type=str, default="gmm",
-                    help='whether applying Cluster alogrithm when choosing examples to store')
-# Sử dụng model huấn luyện sẵn
-parser.add_argument("--dump", type=bool, default=False,
-                    help='dump the model or not')
-parser.add_argument("--model_path", type=str, default="./dump",
-                    help='where to dump the model')
+parser  = argparse.ArgumentParser()
+parser.add_argument("--env", type=str, default="RnD_5step")
+env_name = './env/' + parser.parse_args().env + '.env'
+load_dotenv(env_name)
 
-parser.add_argument('--gpu', default='0', type=str,
-                    help='id(s) for CUDA_VISIBLE_DEVICES')
-parser.add_argument('--n-labeled', type=int, default=2000,
-                    help='Number of training data for each class')
-parser.add_argument('--n-val', type=int, default=2000,
-                    help='Number of validation data for each class')
-parser.add_argument("--nspcoe", type=float, default=1.0,
-                    help='Coefficient for Next Sentence Prediction Loss')
-parser.add_argument("--tskcoe", type=float, default=1.0,
-                    help='Coefficient for task ID Prediction Loss')
-parser.add_argument("--disen", type=bool, default=False,
-                    help='Apply Information Disentanglement or not')
-parser.add_argument("--hidden_size", type=int, default=128,
-                    help='size of General/Specific Space')
+# Access environment variables
+seed = int(os.getenv("SEED"))
+epochs = list(map(int, os.getenv("EPOCHS").split()))
+batch_size = int(os.getenv("BATCH_SIZE"))
+bert_learning_rate = float(os.getenv("BERT_LEARNING_RATE"))
+learning_rate = float(os.getenv("LEARNING_RATE"))
+task_learning_rate = float(os.getenv("TASK_LEARNING_RATE"))
+replay_freq = int(os.getenv("REPLAY_FREQ"))
+clus = os.getenv("CLUS")
+dump = bool(os.getenv("DUMP"))
+model_path = os.getenv("MODEL_PATH")
+gpu = os.getenv("GPU")
+n_labeled = int(os.getenv("N_LABELED"))
+n_val = int(os.getenv("N_VAL"))
+nspcoe = float(os.getenv("NSPCOE"))
+tskcoe = float(os.getenv("TSKCOE"))
+disen = bool(os.getenv("DISEN"))
+hidden_size = int(os.getenv("HIDDEN_SIZE"))
+reg = bool(os.getenv("REG"))
+regcoe = float(os.getenv("REGCOE"))
+regcoe_rply = float(os.getenv("REGCOE_RPLY"))
+reggen = float(os.getenv("REGGEN"))
+regspe = float(os.getenv("REGSPE"))
+store_ratio = float(os.getenv("STORE_RATIO"))
+tasks = os.getenv("TASKS").split()
+select_best = list(map(bool, os.getenv("SELECT_BEST").split()))
 
-parser.add_argument("--reg", type=bool, default=False,
-                    help='Apply Regularization or Not')
-parser.add_argument("--regcoe", type=float, default=0.5,
-                    help='Regularization Coefficient when not replaying')
-parser.add_argument("--regcoe_rply", type=float, default=5.0,
-                    help='Regularization Coefficient when replaying')
-parser.add_argument("--reggen", type=float, default=0.5,
-                    help='Regularization Coefficient on General Space')
-parser.add_argument("--regspe", type=float, default=0.5,
-                    help='Regularization Coefficient on Specific Space')
-parser.add_argument("--store_ratio", type=float, default=0.01,
-                    help='how many samples to store for replaying')
-parser.add_argument('--tasks', nargs='+', type=str,
-                    default=['ag', 'yelp', 'amazon', 'yahoo', 'dbpedia'], help='Task Sequence')
-parser.add_argument('--select_best', nargs='+', type=bool,
-                    default=[True, True, True, True, True],
-                    help='whether picking the model with best val acc on each task')
-
-args = parser.parse_args()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+os.environ['CUDA_VISIBLE_DEVICES'] = gpu
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-args.device = device
+device = device
 n_gpu = torch.cuda.device_count()
 
 # Khai báo sẵn các dataset class
@@ -240,7 +215,7 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
     pre_lbl = None
 
     # If Next Sentence Prediction is added, augment the training data with permuted data
-    if args.disen:
+    if disen:
         p_x, p_mask, p_lbl = get_permutation_batch(x, mask)
         x = torch.cat([x, p_x], dim=0)
         mask = torch.cat([mask, p_mask], dim=0)
@@ -252,7 +227,7 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
     # general_features, specific_features, cls_pred, task_pred, bert_embedding
     total_g_fea, total_s_fea, cls_pred, task_pred, _ = model(x, mask)
 
-    if args.disen:
+    if disen:
         g_fea = total_g_fea[:batch_size, :]
         s_fea = total_s_fea[:batch_size, :]
     else:
@@ -269,20 +244,20 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
     nsp_loss = torch.tensor(0.0).to(device)
 
     # Calculate regularization loss
-    if x_feature is not None and args.reg is True:
+    if x_feature is not None and reg is True:
         fea_len = g_fea.size(1)
         g_fea = g_fea[:batch_size, :]
         s_fea = s_fea[:batch_size, :]
         old_g_fea = x_feature[:, :fea_len]
         old_s_fea = x_feature[:, fea_len:]
 
-        reg_loss += args.regspe * torch.nn.functional.mse_loss(s_fea, old_s_fea) + \
-                    args.reggen * torch.nn.functional.mse_loss(g_fea, old_g_fea)
+        reg_loss += regspe * torch.nn.functional.mse_loss(s_fea, old_s_fea) + \
+                    reggen * torch.nn.functional.mse_loss(g_fea, old_g_fea)
 
         if replay and task_id > 0:
-            reg_loss *= args.regcoe_rply
+            reg_loss *= regcoe_rply
         elif not replay and task_id > 0:
-            reg_loss *= args.regcoe
+            reg_loss *= regcoe
         elif task_id == 0:
             reg_loss *= 0.0  #no reg loss on the 1st task
 
@@ -291,13 +266,13 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
     _, pred_task = task_pred.max(1)
     correct_task = pred_task.eq(t.view_as(pred_task)).sum().item()
     if task_id > 0 and replay:
-        task_loss += args.tskcoe * cls_CR(task_pred, t)
+        task_loss += tskcoe * cls_CR(task_pred, t)
 
     # Calculate Next Sentence Prediction loss
     nsp_acc = 0.0
-    if args.disen:
+    if disen:
         nsp_output = predictor(total_g_fea)
-        nsp_loss += args.nspcoe * nsp_CR(nsp_output, nsp_lbl)
+        nsp_loss += nspcoe * nsp_CR(nsp_output, nsp_lbl)
 
         _, nsp_pred = nsp_output.max(1)
         nsp_correct = nsp_pred.eq(nsp_lbl.view_as(nsp_pred)).sum().item()
@@ -309,7 +284,7 @@ def train_step(model, optimizer, nsp_CR, cls_CR, x, mask, y, t, task_id, replay,
     optimizer.step()
     scheduler.step()
 
-    if args.disen:
+    if disen:
         optimizer_P.step()
         scheduler_P.step()
 
@@ -364,8 +339,8 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
     fea_list = torch.cat(fea_list, dim=0).data.cpu().numpy()
 
     # if use KMeans or GMM
-    if args.clus == "gmm":
-        n_clu = int(args.store_ratio * len(x_list))
+    if clus == "gmm":
+        n_clu = int(store_ratio * len(x_list))
         estimator = GaussianMixture(n_components=n_clu)
         estimator.fit(fea_list)
         label_pred = estimator.predict(fea_list)
@@ -386,9 +361,9 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
 
             if closest_x is not None:
                 buffer.append(closest_x, closest_mask, closest_y, task_id)
-    elif args.clus == 'kmean':
-        n_clu = int(args.store_ratio * len(x_list))
-        estimator = KMeans(n_clusters=n_clu, random_state=args.seed)
+    elif clus == 'kmean':
+        n_clu = int(store_ratio * len(x_list))
+        estimator = KMeans(n_clusters=n_clu, random_state=seed)
         estimator.fit(fea_list)
         label_pred = estimator.labels_
         centroids = estimator.cluster_centers_
@@ -410,7 +385,7 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
                 buffer.append(closest_x, closest_mask, closest_y, task_id)
     else:
         permutations = np.random.permutation(len(x_list))
-        index = permutations[:int(args.store_ratio * len(x_list))]
+        index = permutations[:int(store_ratio * len(x_list))]
         for j in index:
             buffer.append(x_list[j], mask_list[j], y_list[j], task_id)
     print("Buffer size:{}".format(len(buffer)))
@@ -422,16 +397,16 @@ def select_samples_to_store(model, buffer, data_loader, task_id):
 def runRnD():
     # fixed numpy random seed for dataset split
     np.random.seed(0)
-    torch.manual_seed(args.seed)
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed(seed)
     
-    task_num = len(args.tasks)
-    task_classes = [dataset_classes[task] for task in args.tasks]
-    total_classes, offsets = compute_class_offsets(args.tasks, task_classes)
+    task_num = len(tasks)
+    task_classes = [dataset_classes[task] for task in tasks]
+    total_classes, offsets = compute_class_offsets(tasks, task_classes)
     train_loaders, validation_loaders, test_loaders = \
-        prepare_dataloaders(DATA_DIR, args.tasks, offsets, args.n_labeled,
-                            args.n_val, args.batch_size, 16, 16)
+        prepare_dataloaders(DATA_DIR, tasks, offsets, n_labeled,
+                            n_val, batch_size, 16, 16)
 
     # Reset random seed by the torch seed
     np.random.seed(torch.randint(1000, [1]).item())
@@ -440,9 +415,9 @@ def runRnD():
     model = RnDModel(
         n_tasks=task_num,
         n_class=total_classes,
-        hidden_size=args.hidden_size).to(args.device)
+        hidden_size=hidden_size).to(device)
 
-    predictor = Predictor(2, hidden_size=args.hidden_size).to(args.device)
+    predictor = Predictor(2, hidden_size=hidden_size).to(device)
     nsp_CR = torch.nn.CrossEntropyLoss()
     cls_CR = torch.nn.CrossEntropyLoss()
 
@@ -452,11 +427,11 @@ def runRnD():
         # Dựa trên hệ số regularization (weight decay) đối với các trọng số không được biết đến trong AdamW
         optimizer = AdamW(
             [
-                {"params": model.Bert.parameters(), "lr": args.bert_learning_rate, "weight_decay": 0.01},
-                {"params": model.General_Encoder.parameters(), "lr": args.learning_rate, "weight_decay": 0.01},
-                {"params": model.Specific_Encoder.parameters(), "lr": args.learning_rate, "weight_decay": 0.01},
-                {"params": model.cls_classifier.parameters(), "lr": args.learning_rate, "weight_decay": 0.01},
-                {"params": model.task_classifier.parameters(), "lr": args.task_learning_rate, "weight_decay": 0.01},
+                {"params": model.Bert.parameters(), "lr": bert_learning_rate, "weight_decay": 0.01},
+                {"params": model.General_Encoder.parameters(), "lr": learning_rate, "weight_decay": 0.01},
+                {"params": model.Specific_Encoder.parameters(), "lr": learning_rate, "weight_decay": 0.01},
+                {"params": model.cls_classifier.parameters(), "lr": learning_rate, "weight_decay": 0.01},
+                {"params": model.task_classifier.parameters(), "lr": task_learning_rate, "weight_decay": 0.01},
             ]
         )
         # params: List các tham số cần tối ưu
@@ -464,7 +439,7 @@ def runRnD():
         # weight_decay: Hệ số regularization
         optimizer_P = AdamW(
             [
-                {"params": predictor.parameters(), "lr": args.learning_rate, "weight_decay": 0.01},
+                {"params": predictor.parameters(), "lr": learning_rate, "weight_decay": 0.01},
             ]
         )
 
@@ -495,7 +470,7 @@ def runRnD():
 
         length = len(currentBuffer)
 
-        for epoch in range(args.epochs[task_id]):
+        for epoch in range(epochs[task_id]):
             # Training Loss/Accuracy on replaying batches
             cls_losses = []
             reg_losses = []
@@ -513,13 +488,13 @@ def runRnD():
             current_nsp_accs = []
 
             iteration = 1
-            for x, mask, y, t, origin_fea in tqdm(currentBuffer.get_minibatch(args.batch_size),
-                                                  total=length // args.batch_size, ncols=100):
-                if iteration % args.replay_freq == 0 and task_id > 0:
+            for x, mask, y, t, origin_fea in tqdm(currentBuffer.get_minibatch(batch_size),
+                                                  total=length // batch_size, ncols=100):
+                if iteration % replay_freq == 0 and task_id > 0:
                     total_x, total_mask, total_y, total_t, total_fea = x, mask, y, t, origin_fea
                     for j in range(task_id):
                         old_x, old_mask, old_y, old_t, old_fea = \
-                            buffer.get_random_batch(args.batch_size, j)
+                            buffer.get_random_batch(batch_size, j)
                         total_x = torch.cat([old_x, total_x], dim=0)
                         total_mask = torch.cat([old_mask, total_mask], dim=0)
                         total_y = torch.cat([old_y, total_y], dim=0)
@@ -532,11 +507,11 @@ def runRnD():
                     total_t = total_t[permutation]
                     total_fea = total_fea[permutation, :]
                     for j in range(task_id + 1):
-                        x = total_x[j * args.batch_size: (j + 1) * args.batch_size, :]
-                        mask = total_mask[j * args.batch_size: (j + 1) * args.batch_size, :]
-                        y = total_y[j * args.batch_size: (j + 1) * args.batch_size]
-                        t = total_t[j * args.batch_size: (j + 1) * args.batch_size]
-                        fea = total_fea[j * args.batch_size: (j + 1) * args.batch_size, :]
+                        x = total_x[j * batch_size: (j + 1) * batch_size, :]
+                        mask = total_mask[j * batch_size: (j + 1) * batch_size, :]
+                        y = total_y[j * batch_size: (j + 1) * batch_size]
+                        t = total_t[j * batch_size: (j + 1) * batch_size]
+                        fea = total_fea[j * batch_size: (j + 1) * batch_size, :]
                         x, mask, y, t, fea = \
                             x.to(device), mask.to(device), y.to(device), t.to(device), fea.to(device)
 
@@ -611,16 +586,16 @@ def runRnD():
         if len(acc_track) > 0:
             print("ACC Track: {}".format(acc_track))
 
-        if args.select_best[task_id]:
+        if select_best[task_id]:
             model.load_state_dict(deepcopy(best_model))
             predictor.load_state_dict(deepcopy(best_predictor))
         print("------------------Best Result------------------")
         avg_acc, _ = validation(model, task_id, test_loaders)
         print("Best avg acc: {}".format(avg_acc))
 
-        if args.dump is True:
-            task_order = '_'.join(args.tasks)
-            path = './dump/' + task_order + '_' + str(args.seed) + '_' + str(task_id) + '.pt'
+        if dump is True:
+            task_order = '_'.join(tasks)
+            path = './dump/' + task_order + '_' + str(seed) + '_' + str(task_id) + '.pt'
             torch.save(model, path)
 
         select_samples_to_store(model, buffer, data_loader, task_id)

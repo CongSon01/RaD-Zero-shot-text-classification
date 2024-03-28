@@ -1,49 +1,42 @@
 import os
-import argparse
+from dotenv import load_dotenv
 from copy import deepcopy
-
-DATA_DIR = '../data'
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--epochs", nargs='+', type=int,
-                    default=[10, 10, 10, 10, 10],
-                    help='Epoch number for each task')
-parser.add_argument("--batch_size", type=int, default=8,
-                    help='training batch size')
-parser.add_argument("--bert_learning_rate", type=float, default=3e-5,
-                    help='learning rate for pretrained Bert')
-parser.add_argument("--learning_rate", type=float, default=3e-5,
-                    help='learning rate for Class Classifier')
-
-# 0822 1628 -- increase latent size, use tsne
-parser.add_argument("--replay_freq", type=int, default=10,
-                    help='frequency of replaying, i.e. replay one batch from memory'
-                         ' every replay_freq batches')
-parser.add_argument('--gpu', default='0', type=str,
-                    help='id(s) for CUDA_VISIBLE_DEVICES')
-parser.add_argument('--n-labeled', type=int, default=2000,
-                    help='Number of labeled data')
-parser.add_argument("--store_ratio", type=float, default=0.01,
-                    help='how many samples to store for replaying')
-parser.add_argument('--tasks', nargs='+', type=str,
-                    default=['ag', 'yelp', 'amazon', 'yahoo', 'dbpedia'], help='Task Sequence')
-
-
-args = parser.parse_args()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
 import numpy as np
 import torch
+import argparse
 from tqdm import tqdm
 from transformers import AdamW
 
 from model.basemodel import BaseModel
 from read_data import compute_class_offsets, prepare_dataloaders
 
+
+DATA_DIR = '../data'
+
+# Load environment variables from .env file
+parser  = argparse.ArgumentParser()
+parser.add_argument("--env", type=str, default="Replay_5step")
+env_name = './env/' + parser.parse_args().env + '.env'
+load_dotenv(env_name)
+
+# Access environment variables
+seed = int(os.getenv("SEED"))
+epochs = list(map(int, os.getenv("EPOCHS").split()))
+batch_size = int(os.getenv("BATCH_SIZE"))
+bert_learning_rate = float(os.getenv("BERT_LEARNING_RATE"))
+learning_rate = float(os.getenv("LEARNING_RATE"))
+replay_freq = int(os.getenv("REPLAY_FREQ"))
+gpu = os.getenv("GPU")
+n_labeled = int(os.getenv("N_LABELED"))
+store_ratio = float(os.getenv("STORE_RATIO"))
+tasks = os.getenv("TASKS").split()
+
+# Set CUDA_VISIBLE_DEVICES environment variable
+os.environ['CUDA_VISIBLE_DEVICES'] = gpu
+
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-args.device = device
+device = device
 n_gpu = torch.cuda.device_count()
 
 dataset_classes = {
@@ -130,7 +123,7 @@ def random_select_samples_to_store(buffer, data_loader, task_id):
     x_list = torch.cat(x_list, dim=0).data.cpu().numpy()
     y_list = torch.cat(y_list, dim=0).data.cpu().numpy()
     permutations = np.random.permutation(len(x_list))
-    index = permutations[:int(args.store_ratio * len(x_list))]
+    index = permutations[:int(store_ratio * len(x_list))]
     for j in index:
         buffer.append(x_list[j], y_list[j], task_id)
 
@@ -142,22 +135,22 @@ def random_select_samples_to_store(buffer, data_loader, task_id):
 
 def runReplay():
     np.random.seed(0)
-    torch.manual_seed(args.seed)
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed(seed)
 
-    task_num = len(args.tasks)
-    task_classes = [dataset_classes[task] for task in args.tasks]
-    total_classes, offsets = compute_class_offsets(args.tasks, task_classes)
+    task_num = len(tasks)
+    task_classes = [dataset_classes[task] for task in tasks]
+    total_classes, offsets = compute_class_offsets(tasks, task_classes)
     train_loaders, validation_loaders, test_loaders = \
-        prepare_dataloaders(DATA_DIR, args.tasks, offsets, args.n_labeled,
-                            2000, args.batch_size, 128, 128)
+        prepare_dataloaders(DATA_DIR, tasks, offsets, n_labeled,
+                            2000, batch_size, 128, 128)
 
     # Reset random seed by the torch seed
     np.random.seed(torch.randint(1000, [1]).item())
 
     buffer = Memory()
-    model = BaseModel(total_classes).to(args.device)
+    model = BaseModel(total_classes).to(device)
     cls_CR = torch.nn.CrossEntropyLoss()
 
     for task_id in range(task_num):
@@ -166,8 +159,8 @@ def runReplay():
 
         optimizer = AdamW(
             [
-                {"params": model.bert.parameters(), "lr": args.bert_learning_rate},
-                {"params": model.classifier.parameters(), "lr": args.learning_rate},
+                {"params": model.bert.parameters(), "lr": bert_learning_rate},
+                {"params": model.classifier.parameters(), "lr": learning_rate},
             ]
         )
 
@@ -176,22 +169,22 @@ def runReplay():
 
         acc_track = []
 
-        for epoch in range(args.epochs[task_id]):
+        for epoch in range(epochs[task_id]):
             iteration = 1
             for x, mask, y in tqdm(data_loader, total=length, ncols=100):
-                if iteration % args.replay_freq == 0 and task_id > 0:
-                    # replay once every args.replay_freq batches, starting from the 2nd task
+                if iteration % replay_freq == 0 and task_id > 0:
+                    # replay once every replay_freq batches, starting from the 2nd task
                     total_x, total_y = x, y
                     for j in range(task_id):
-                        old_x, old_y, old_t = buffer.get_random_batch(args.batch_size, j)
+                        old_x, old_y, old_t = buffer.get_random_batch(batch_size, j)
                         total_x = torch.cat([old_x, total_x], dim=0)
                         total_y = torch.cat([old_y, total_y], dim=0)
                     permutation = np.random.permutation(total_x.shape[0])
                     total_x = total_x[permutation, :]
                     total_y = total_y[permutation]
                     for j in range(task_id + 1):
-                        x = total_x[j * args.batch_size: (j + 1) * args.batch_size, :]
-                        y = total_y[j * args.batch_size: (j + 1) * args.batch_size]
+                        x = total_x[j * batch_size: (j + 1) * batch_size, :]
+                        y = total_y[j * batch_size: (j + 1) * batch_size]
                         x, y = x.to(device), y.to(device)
                         train_step(model, optimizer, cls_CR, x, y)
                 else:

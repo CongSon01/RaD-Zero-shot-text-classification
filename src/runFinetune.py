@@ -1,30 +1,27 @@
 import os
 import argparse
 from copy import deepcopy
+from dotenv import load_dotenv
 
 DATA_DIR = '../data'
+# Load environment variables from .env file
+parser  = argparse.ArgumentParser()
+parser.add_argument("--env", type=str, default="Finetune_5step")
+env_name = './env/' + parser.parse_args().env + '.env'
+load_dotenv(env_name)
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--epochs", nargs='+', type=int,
-                    default=[10, 10, 10, 10, 10],
-                    help='Epoch number for each task')
-parser.add_argument("--batch_size", type=int, default=8,
-                    help='training batch size')
-parser.add_argument("--bert_learning_rate", type=float, default=3e-5,
-                    help='learning rate for pretrained Bert')
-parser.add_argument("--learning_rate", type=float, default=3e-5,
-                    help='learning rate for Class Classifier')
-parser.add_argument('--gpu', default='0', type=str,
-                    help='id(s) for CUDA_VISIBLE_DEVICES')
-parser.add_argument('--n-labeled', type=int, default=2000,
-                    help='Number of labeled data')
-parser.add_argument('--tasks', nargs='+', type=str,
-                    default=['ag', 'yelp', 'amazon', 'yahoo', 'dbpedia'],
-                    help='Task Sequence')
+# Access environment variables
+seed = int(os.getenv("SEED"))
+epochs = list(map(int, os.getenv("EPOCHS").split()))
+batch_size = int(os.getenv("BATCH_SIZE"))
+bert_learning_rate = float(os.getenv("BERT_LEARNING_RATE"))
+learning_rate = float(os.getenv("LEARNING_RATE"))
+gpu = os.getenv("GPU")
+n_labeled = int(os.getenv("N_LABELED"))
+tasks = os.getenv("TASKS").split()
 
-args = parser.parse_args()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+# Set CUDA_VISIBLE_DEVICES environment variable
+os.environ['CUDA_VISIBLE_DEVICES'] = gpu
 
 import numpy as np
 import torch
@@ -36,7 +33,7 @@ from read_data import compute_class_offsets, prepare_dataloaders
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-args.device = device
+device = device
 n_gpu = torch.cuda.device_count()
 
 dataset_classes = {
@@ -88,21 +85,21 @@ def validation(model, t, validation_loaders):
 
 def runFineTune():
     np.random.seed(0)
-    torch.manual_seed(args.seed)
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed(seed)
 
-    task_num = len(args.tasks)
-    task_classes = [dataset_classes[task] for task in args.tasks]
-    total_classes, offsets = compute_class_offsets(args.tasks, task_classes)
+    task_num = len(tasks)
+    task_classes = [dataset_classes[task] for task in tasks]
+    total_classes, offsets = compute_class_offsets(tasks, task_classes)
     train_loaders, validation_loaders, test_loaders = \
-        prepare_dataloaders(DATA_DIR, args.tasks, offsets, args.n_labeled,
-                            2000, args.batch_size, 128, 128)
+        prepare_dataloaders(DATA_DIR, tasks, offsets, n_labeled,
+                            2000, batch_size, 128, 128)
 
     # Reset random seed by the torch seed
     np.random.seed(torch.randint(1000, [1]).item())
 
-    model = BaseModel(total_classes).to(args.device)
+    model = BaseModel(total_classes).to(device)
     cls_CR = torch.nn.CrossEntropyLoss()
 
     for task_id in range(task_num):
@@ -111,8 +108,8 @@ def runFineTune():
 
         optimizer = AdamW(
             [
-                {"params": model.bert.parameters(), "lr": args.bert_learning_rate},
-                {"params": model.classifier.parameters(), "lr": args.learning_rate},
+                {"params": model.bert.parameters(), "lr": bert_learning_rate},
+                {"params": model.classifier.parameters(), "lr": learning_rate},
             ]
         )
 
@@ -121,7 +118,7 @@ def runFineTune():
 
         acc_track = []
 
-        for epoch in range(args.epochs[task_id]):
+        for epoch in range(epochs[task_id]):
             iteration = 1
             for x, mask, y in tqdm(data_loader, total=length, ncols=100):
                 x, y = x.to(device), y.to(device)
