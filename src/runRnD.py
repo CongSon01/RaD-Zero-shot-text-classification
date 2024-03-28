@@ -595,7 +595,7 @@ def runRnD():
 
         if dump is True:
             task_order = '_'.join(tasks)
-            path = './dump/' + task_order + '_' + str(seed) + '_' + str(task_id) + '.pt'
+            path = '../dump/' + task_order + '_' + str(seed) + '_' + str(task_id) + '.pt'
             torch.save(model, path)
 
         select_samples_to_store(model, buffer, data_loader, task_id)
