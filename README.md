@@ -9,25 +9,27 @@ python preprocess.py
 ```
 ### Training RnD model (Full options)
 ```
+# 3 tasks
+python runRnD.py --env RnD_3step
 
-python runRnD.py --tasks ag yelp amazon yahoo dbpedia --epochs 1 1 1 1 1 --batch_size 2 --disen True --reg True --reggen 0.5 --regspe 0.5 --clus gmm --n-labeled -1 --n-val 500
+# 5 tasks
+python runRnD.py --env RnD_5step
 ```
 ### Training Fine-tune model 
 ```
-
 # 3 tasks
-python runFinetune.py --tasks ag yelp yahoo --epochs 4 3 2 --batch_size 2 
+python runFinetune.py --env Finetune_3step
 
 # 5 task
-python runFinetune.py --tasks ag yelp amazon yahoo dbpedia --epochs 4 3 3 2 1 --batch_size 2
+python runFinetune.py --env Finetune_5step
 ```
 ### Training Replay model
 ```
 # 3 tasks
-python runReplay.py --tasks ag yelp yahoo --epochs 4 3 2 --batch_size 2  
+python runFinetune.py --env Replay_3step
 
 # 5 task
-python runReplay.py --tasks ag yelp amazon yahoo dbpedia --epochs 4 3 3 2 1 --batch_size 2
+python runFinetune.py --env Replay_5step
 ```
  
 
