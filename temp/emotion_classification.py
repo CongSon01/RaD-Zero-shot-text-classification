@@ -8,9 +8,9 @@ from sklearn.preprocessing import OneHotEncoder
 import evaluate
 
 # call dataset
-train_df = pd.read_csv("./data/train.csv").sample(frac=1).reset_index(drop=True)
-test_df = pd.read_csv("./data/test.csv").sample(frac=1).reset_index(drop=True)
-val_df = pd.read_csv("./data/val.csv").sample(frac=1).reset_index(drop=True)
+train_df = pd.read_csv("./data_temp/train.csv").sample(frac=1).reset_index(drop=True)
+test_df = pd.read_csv("./data_temp/test.csv").sample(frac=1).reset_index(drop=True)
+val_df = pd.read_csv("./data_temp/val.csv").sample(frac=1).reset_index(drop=True)
 
 # define labels
 labels = [label for label in set(train_df['label'])]
