@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 transformers
+=======
+>>>>>>> 7652f09f918e7743a31c8c924da469daa478c83c
 tqdm
 scikit-learn
 numpy
@@ -7,3 +10,7 @@ python-dotenv
 transformers
 datasets
 evaluate
+<<<<<<< HEAD
+=======
+# conda install -c fastai accelerate
+>>>>>>> 7652f09f918e7743a31c8c924da469daa478c83c
