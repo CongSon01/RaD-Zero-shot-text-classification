@@ -1,5 +1,4 @@
-pytorch==1.4.0
-transformers==3.5.1
+transformers
 tqdm
 scikit-learn
 numpy
@@ -8,4 +7,3 @@ python-dotenv
 transformers
 datasets
 evaluate
-accelerate
