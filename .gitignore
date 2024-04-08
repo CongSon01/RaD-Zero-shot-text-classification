@@ -2,3 +2,4 @@ data/
 dump/
 my_awesome_model/
 bert-finetuned-sem_eval/
+bert-large-finetuned-sem_eval/

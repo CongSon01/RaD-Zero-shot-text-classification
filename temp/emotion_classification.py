@@ -8,6 +8,21 @@ from sklearn.preprocessing import OneHotEncoder
 import evaluate
 from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
 from transformers import EvalPrediction
+import wandb
+
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="emotion-classification",
+
+    config={
+        "embbeding": "BERT-Base-uncased",
+        "classification": "Multi_label_classification-BERT",
+        "learning_rate": 2e-5,
+        "Batch_size": 8,
+        "epochs": 5,
+        "weight_decay": 0.01,
+    }
+)
 
 # define token
 tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
@@ -69,6 +84,7 @@ def multi_label_metrics(predictions, labels, threshold=0.5):
     metrics = {'f1': f1_micro_average,
                'roc_auc': roc_auc,
                'accuracy': accuracy}
+    wandb.log(metrics)
     return metrics
 
      
@@ -92,7 +108,7 @@ def main():
 
     # define arguments
     training_args = TrainingArguments(
-        f"bert-finetuned-sem_eval",
+        f"bert-large-finetuned-sem_eval",
         evaluation_strategy = "epoch",
         save_strategy = "epoch",
         learning_rate=2e-5,
@@ -115,6 +131,8 @@ def main():
 
     trainer.train()
 
+# [optional] finish the wandb run, necessary in notebooks
+wandb.finish()
 if __name__ == "__main__":
     main()
 
